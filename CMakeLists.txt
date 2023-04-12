@@ -1,11 +1,10 @@
 cmake_minimum_required(VERSION 3.0)
 
-project(offsetAllocator)
+project(offalloc)
 
 set(SOURCE_FILES
-   offsetAllocator.cpp
-   offsetAllocator.hpp
+   offalloc.c
+   offalloc.h
 )
 
 add_library(${PROJECT_NAME} ${SOURCE_FILES})
-setup_target_libs(${PROJECT_NAME})
