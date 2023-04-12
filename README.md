@@ -48,26 +48,26 @@ CMakeLists.txt exists for cmake folder include. Alternatively, just copy the off
 #include "offalloc.h"
 
 oa_allocator_t oa;
-oa_create(&oa, 65536, 1024); // Allocator with 65536 contiguous elements in total
-                             // and 1024 maximum simultaneous allocations
+oa_create(&oa, 65536, 1024);  // Allocator with 65536 contiguous elements in total
+                              // and 1024 maximum simultaneous allocations
 
 oa_allocation_t a, b;
 
-oa_allocate(&oa, 1337, &a); // Allocate a 1337 element contiguous range
+oa_allocate(&oa, 1337, &a);   // Allocate a 1337 element contiguous range
 uint32_t offset_a = a.offset; // Provides offset to the first element of the range
 do_something(offset_a);
 
-oa_allocate(&oa, 123, &b); // Allocate a 123 element contiguous range
+oa_allocate(&oa, 123, &b);    // Allocate a 123 element contiguous range
 uint32_t offset_b = b.offset; // Provides offset to the first element of the range
 do_something(offset_b);
 
 oa_storage_report_t r;
 oa_storage_report(&oa, &r);
 
-oa_free(&oa, &a); // Free allocation a
-oa_free(&oa, &b); // Free allocation b
+oa_free(&oa, &a);             // Free allocation a
+oa_free(&oa, &b);             // Free allocation b
 
-oa_destroy(&oa); // Destroy the allocator
+oa_destroy(&oa);              // Destroy the allocator
 ```
 
 ## References
@@ -78,6 +78,7 @@ https://www.researchgate.net/profile/Alfons-Crespo/publication/234785757_A_compa
 
 ## Disclaimer
 Early one weekend prototype. Unit tests are green, but coverage is still not 100%. Use at your own risk!
+
 C99 version: Hasn't been tested thoroughly yet
 
 ## License
