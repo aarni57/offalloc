@@ -1,4 +1,4 @@
-# OffsetAllocator
+# offalloc
 Fast hard realtime O(1) offset allocator with minimal fragmentation. 
 
 Uses 256 bins with 8 bit floating point distribution (3 bit mantissa + 5 bit exponent) and a two level bitfield to find the next available bin using 2x LZCNT instructions to make all operations O(1). Bin sizes following the floating point distribution ensures hard bounds for memory overhead percentage regarless of size class. Pow2 bins would waste up to +100% memory (+50% on average). Our float bins waste up to +12.5% (+6.25% on average).
@@ -79,7 +79,7 @@ https://www.researchgate.net/profile/Alfons-Crespo/publication/234785757_A_compa
 ## Disclaimer
 Early one weekend prototype. Unit tests are green, but coverage is still not 100%. Use at your own risk!
 
-C99 version: Hasn't been tested thoroughly yet
+C99 version: Hasn't been thoroughly tested yet
 
 ## License
 MIT license (see file: LICENSE)
