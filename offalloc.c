@@ -6,23 +6,23 @@
 #include "offalloc.h"
 
 #include <stdlib.h>
-#include <string.h>
 
-#ifndef NDEBUG
+#if !defined(NDEBUG)
+#   define OA_DEBUG
+
 #   include <assert.h>
-#   define OA_ASSERT(x) assert(x)
-
-#   if 0
-#       include <stdio.h>
-#       define OA_DEBUG_VERBOSE
-#   endif
+#   define oa_assert(x) assert(x)
 #else
-#   define OA_ASSERT(x)
+#   define oa_assert(x)
+#endif
+
+#if defined(OA_VERBOSE)
+#   include <stdio.h>
 #endif
 
 static uint32_t lzcnt_nonzero(uint32_t v)
 {
-#ifdef _MSC_VER
+#if defined(_MSC_VER)
     unsigned long retVal;
     _BitScanReverse(&retVal, v);
     return 31 - retVal;
@@ -33,7 +33,7 @@ static uint32_t lzcnt_nonzero(uint32_t v)
 
 static uint32_t tzcnt_nonzero(uint32_t v)
 {
-#ifdef _MSC_VER
+#if defined(_MSC_VER)
     unsigned long retVal;
     _BitScanForward(&retVal, v);
     return retVal;
@@ -46,8 +46,10 @@ static uint32_t tzcnt_nonzero(uint32_t v)
 #define SMALLFLOAT_MANTISSA_VALUE (1 << SMALLFLOAT_MANTISSA_BITS)
 #define SMALLFLOAT_MANTISSA_MASK (SMALLFLOAT_MANTISSA_VALUE - 1)
 
-// Bin sizes follow floating point (exponent + mantissa) distribution (piecewise linear log approx)
-// This ensures that for each size class, the average overhead percentage stays the same
+// Bin sizes follow floating point (exponent + mantissa) distribution
+// (piecewise linear log approx)
+// This ensures that for each size class,
+// the average overhead percentage stays the same
 static uint32_t smallfloat_uint_to_float_round_up(uint32_t size)
 {
     uint32_t exp = 0;
@@ -72,7 +74,8 @@ static uint32_t smallfloat_uint_to_float_round_up(uint32_t size)
             mantissa++;
     }
 
-    return (exp << SMALLFLOAT_MANTISSA_BITS) + mantissa; // + allows mantissa->exp overflow for round up
+    // + allows mantissa->exp overflow for round up
+    return (exp << SMALLFLOAT_MANTISSA_BITS) + mantissa;
 }
 
 static uint32_t smallfloat_uint_to_float_round_down(uint32_t size)
@@ -107,7 +110,8 @@ static uint32_t smallfloat_float_to_uint(uint32_t floatValue)
 }
 
 // Utility functions
-static uint32_t find_lowest_set_bit_after(uint32_t bitmask, uint32_t start_bit_index)
+static uint32_t find_lowest_set_bit_after(uint32_t bitmask,
+    uint32_t start_bit_index)
 {
     uint32_t mask_before_start_index = (1 << start_bit_index) - 1;
     uint32_t mask_after_start_index = ~mask_before_start_index;
@@ -135,11 +139,12 @@ static const struct ao_node_t AO_NODE_DEFAULTS = {
 
 //
 
-static uint32_t insert_node_into_bin(oa_allocator_t *self, uint32_t size, uint32_t data_offset)
+static uint32_t insert_node_into_bin(oa_allocator_t *self, uint32_t size,
+    uint32_t data_offset)
 {
     // Round down to bin index to ensure that bin >= alloc
     uint32_t bin_index = smallfloat_uint_to_float_round_down(size);
-    OA_ASSERT(bin_index < OA_NUM_LEAF_BINS);
+    oa_assert(bin_index < OA_NUM_LEAF_BINS);
 
     uint32_t top_bin_index = bin_index >> OA_TOP_BINS_INDEX_SHIFT;
     uint32_t leaf_bin_index = bin_index & OA_LEAF_BINS_INDEX_MASK;
@@ -151,14 +156,16 @@ static uint32_t insert_node_into_bin(oa_allocator_t *self, uint32_t size, uint32
         self->used_bins_top |= 1 << top_bin_index;
     }
 
-    // Take a freelist node and insert on top of the bin linked list (next = old top)
+    // Take a freelist node and insert on top of the bin linked list
+    // (next = old top)
     uint32_t top_node_index = self->bin_indices[bin_index];
-    OA_ASSERT(self->free_offset < self->max_allocs);
+    oa_assert(self->free_offset < self->max_allocs);
     uint32_t node_index = self->free_nodes[self->free_offset--];
-    OA_ASSERT(node_index < self->max_allocs);
+    oa_assert(node_index < self->max_allocs);
 
-#ifdef OA_DEBUG_VERBOSE
-    printf("Getting node %u from freelist[%u]\n", node_index, self->free_offset + 1);
+#if defined(OA_VERBOSE)
+    printf("Getting node %u from freelist[%u]\n", node_index,
+        self->free_offset + 1);
 #endif
 
     self->nodes[node_index] = AO_NODE_DEFAULTS;
@@ -167,7 +174,7 @@ static uint32_t insert_node_into_bin(oa_allocator_t *self, uint32_t size, uint32
     self->nodes[node_index].bin_list_next = top_node_index;
 
     if (top_node_index != OA_UNUSED) {
-        OA_ASSERT(top_node_index < self->max_allocs);
+        oa_assert(top_node_index < self->max_allocs);
         self->nodes[top_node_index].bin_list_prev = node_index;
     }
 
@@ -175,8 +182,9 @@ static uint32_t insert_node_into_bin(oa_allocator_t *self, uint32_t size, uint32
 
     self->free_storage += size;
 
-#ifdef OA_DEBUG_VERBOSE
-    printf("Free storage: %u (+%u) (insert_node_into_bin)\n", self->free_storage, size);
+#if defined(OA_VERBOSE)
+    printf("Free storage: %u (+%u) (insert_node_into_bin)\n",
+        self->free_storage, size);
 #endif
 
     return node_index;
@@ -184,24 +192,29 @@ static uint32_t insert_node_into_bin(oa_allocator_t *self, uint32_t size, uint32
 
 static void remove_node_from_bin(oa_allocator_t *self, uint32_t node_index)
 {
-    OA_ASSERT(node_index < self->max_allocs);
+    oa_assert(node_index < self->max_allocs);
     oa_node_t *node = &self->nodes[node_index];
 
     if (node->bin_list_prev != OA_UNUSED) {
-        // Easy case: We have previous node. Just remove this node from the middle of the list.
+        // Easy case: We have previous node.
+        // Just remove this node from the middle of the list.
         self->nodes[node->bin_list_prev].bin_list_next = node->bin_list_next;
-        if (node->bin_list_next != OA_UNUSED) self->nodes[node->bin_list_next].bin_list_prev = node->bin_list_prev;
+        if (node->bin_list_next != OA_UNUSED)
+            self->nodes[node->bin_list_next].bin_list_prev =
+                node->bin_list_prev;
     } else {
         // Hard case: We are the first node in a bin. Find the bin.
 
         // Round down to bin index to ensure that bin >= alloc
-        uint32_t bin_index = smallfloat_uint_to_float_round_down(node->data_size & OA_NODE_DATA_SIZE_MASK);
+        uint32_t bin_index = smallfloat_uint_to_float_round_down(
+            node->data_size & OA_NODE_DATA_SIZE_MASK);
 
         uint32_t top_bin_index = bin_index >> OA_TOP_BINS_INDEX_SHIFT;
         uint32_t leaf_bin_index = bin_index & OA_LEAF_BINS_INDEX_MASK;
 
         self->bin_indices[bin_index] = node->bin_list_next;
-        if (node->bin_list_next != OA_UNUSED) self->nodes[node->bin_list_next].bin_list_prev = OA_UNUSED;
+        if (node->bin_list_next != OA_UNUSED)
+            self->nodes[node->bin_list_next].bin_list_prev = OA_UNUSED;
 
         // Bin empty?
         if (self->bin_indices[bin_index] == OA_UNUSED) {
@@ -210,20 +223,23 @@ static void remove_node_from_bin(oa_allocator_t *self, uint32_t node_index)
 
             // All leaf bins empty?
             if (self->used_bins[top_bin_index] == 0)
-                self->used_bins_top &= ~(1 << top_bin_index); // Remove a top bin mask bit
+                // Remove a top bin mask bit
+                self->used_bins_top &= ~(1 << top_bin_index);
         }
     }
 
     // Insert the node to freelist
-#ifdef OA_DEBUG_VERBOSE
-    printf("Putting node %u into freelist[%u] (remove_node_from_bin)\n", node_index, self->free_offset + 1);
+#if defined(OA_VERBOSE)
+    printf("Putting node %u into freelist[%u] (remove_node_from_bin)\n",
+        node_index, self->free_offset + 1);
 #endif
-    OA_ASSERT(self->free_offset + 1 < self->max_allocs);
+    oa_assert(self->free_offset + 1 < self->max_allocs);
     self->free_nodes[++self->free_offset] = node_index;
 
     self->free_storage -= node->data_size & OA_NODE_DATA_SIZE_MASK;
-#ifdef OA_DEBUG_VERBOSE
-    printf("Free storage: %u (-%u) (remove_node_from_bin)\n", self->free_storage, node->data_size & OA_NODE_DATA_SIZE_MASK);
+#if defined(OA_VERBOSE)
+    printf("Free storage: %u (-%u) (remove_node_from_bin)\n",
+        self->free_storage, node->data_size & OA_NODE_DATA_SIZE_MASK);
 #endif
 }
 
@@ -231,7 +247,9 @@ static void remove_node_from_bin(oa_allocator_t *self, uint32_t node_index)
 
 int oa_create(oa_allocator_t *self, uint32_t size, uint32_t max_allocs)
 {
-    memset(self, 0, sizeof(oa_allocator_t));
+    oa_assert(!self->nodes);
+    oa_assert(!self->free_nodes);
+    oa_assert(self->used_bins_top == 0);
 
     self->size = size;
     self->max_allocs = max_allocs;
@@ -246,7 +264,8 @@ int oa_create(oa_allocator_t *self, uint32_t size, uint32_t max_allocs)
         return -1;
     }
 
-    self->free_nodes = (oa_index_t *)malloc(sizeof(oa_index_t) * self->max_allocs);
+    self->free_nodes = (oa_index_t *)malloc(
+        sizeof(oa_index_t) * self->max_allocs);
     if (!self->free_nodes) {
         free(self->nodes);
         self->nodes = NULL;
@@ -270,6 +289,12 @@ int oa_create(oa_allocator_t *self, uint32_t size, uint32_t max_allocs)
 
 void oa_destroy(oa_allocator_t *self)
 {
+#if defined(OA_DEBUG)
+    remove_node_from_bin(self, 0);
+    oa_assert(self->free_offset == self->max_allocs - 1);
+    oa_assert(self->free_storage == 0);
+#endif
+
     free(self->free_nodes);
     self->free_nodes = NULL;
 
@@ -277,14 +302,15 @@ void oa_destroy(oa_allocator_t *self)
     self->nodes = NULL;
 }
 
-int oa_allocate(oa_allocator_t *self, uint32_t size, oa_allocation_t *allocation)
+int oa_allocate(oa_allocator_t *self, uint32_t size,
+    oa_allocation_t *allocation)
 {
-    OA_ASSERT(size != 0);
+    oa_assert(size != 0);
 
     // Out of allocations?
     if (self->free_offset == 0) {
         allocation->offset = OA_NO_SPACE;
-        allocation->metadata = OA_INVALID_INDEX;
+        allocation->index = OA_INVALID_INDEX;
         return -1;
     }
 
@@ -300,30 +326,37 @@ int oa_allocate(oa_allocator_t *self, uint32_t size, oa_allocation_t *allocation
 
     // If top bin exists, scan its leaf bin. This can fail (NO_SPACE).
     if (self->used_bins_top & (1 << top_bin_index))
-        leaf_bin_index = find_lowest_set_bit_after(self->used_bins[top_bin_index], min_leaf_bin_index);
+        leaf_bin_index = find_lowest_set_bit_after(
+            self->used_bins[top_bin_index], min_leaf_bin_index);
 
     // If we didn't find space in top bin, we search top bin from +1
     if (leaf_bin_index == OA_NO_SPACE) {
-        top_bin_index = find_lowest_set_bit_after(self->used_bins_top, min_top_bin_index + 1);
+        top_bin_index = find_lowest_set_bit_after(
+            self->used_bins_top, min_top_bin_index + 1);
 
         // Out of space?
         if (top_bin_index == OA_NO_SPACE) {
+#if defined(OA_VERBOSE)
+            printf("oa_allocate: No space; trying to allocate %u\n", size);
+#endif
             allocation->offset = OA_NO_SPACE;
-            allocation->metadata = OA_INVALID_INDEX;
+            allocation->index = OA_INVALID_INDEX;
             return -1;
         }
 
-        // All leaf bins here fit the alloc, since the top bin was rounded up. Start leaf search from bit 0.
-        // NOTE: This search can't fail since at least one leaf bit was set because the top bit was set.
+        // All leaf bins here fit the alloc, since the top bin was rounded up.
+        // Start leaf search from bit 0. NOTE: This search can't fail since at
+        // least one leaf bit was set because the top bit was set.
         leaf_bin_index = tzcnt_nonzero(self->used_bins[top_bin_index]);
     }
 
-    uint32_t bin_index = (top_bin_index << OA_TOP_BINS_INDEX_SHIFT) | leaf_bin_index;
-    OA_ASSERT(bin_index < OA_NUM_LEAF_BINS);
+    uint32_t bin_index =
+        (top_bin_index << OA_TOP_BINS_INDEX_SHIFT) | leaf_bin_index;
+    oa_assert(bin_index < OA_NUM_LEAF_BINS);
 
     // Pop the top node of the bin. Bin top = node->next.
     uint32_t node_index = self->bin_indices[bin_index];
-    OA_ASSERT(node_index < self->max_allocs);
+    oa_assert(node_index < self->max_allocs);
     oa_node_t *node = &self->nodes[node_index];
     uint32_t node_total_size = node->data_size & OA_NODE_DATA_SIZE_MASK;
     node->data_size = size | OA_NODE_USED_FLAG;
@@ -332,11 +365,12 @@ int oa_allocate(oa_allocator_t *self, uint32_t size, oa_allocation_t *allocation
     if (node->bin_list_next != OA_INVALID_INDEX)
         self->nodes[node->bin_list_next].bin_list_prev = OA_INVALID_INDEX;
 
-    OA_ASSERT(self->free_storage >= node_total_size);
+    oa_assert(self->free_storage >= node_total_size);
     self->free_storage -= node_total_size;
 
-#ifdef OA_DEBUG_VERBOSE
-    printf("Free storage: %u (-%u) (oa_allocate)\n", self->free_storage, node_total_size);
+#if defined(OA_VERBOSE)
+    printf("Free storage: %u (-%u) (oa_allocate)\n", self->free_storage,
+        node_total_size);
 #endif
 
     // Bin empty?
@@ -346,46 +380,53 @@ int oa_allocate(oa_allocator_t *self, uint32_t size, oa_allocation_t *allocation
 
         // All leaf bins empty?
         if (self->used_bins[top_bin_index] == 0)
-            self->used_bins_top &= ~(1 << top_bin_index); // Remove a top bin mask bit
+            // Remove a top bin mask bit
+            self->used_bins_top &= ~(1 << top_bin_index);
     }
 
     // Push back remainder N elements to a lower bin
-    OA_ASSERT(node_total_size >= size);
+    oa_assert(node_total_size >= size);
     uint32_t remainder_size = node_total_size - size;
     if (remainder_size != 0) {
-        uint32_t new_node_index = insert_node_into_bin(self, remainder_size, node->data_offset + size);
+        uint32_t new_node_index = insert_node_into_bin(self, remainder_size,
+            node->data_offset + size);
 
-        // Link nodes next to each other so that we can merge them later if both are free
-        // And update the old next neighbor to point to the new node (in middle)
-        if (node->neighbor_next != OA_UNUSED) self->nodes[node->neighbor_next].neighbor_prev = new_node_index;
+        // Link nodes next to each other so that we can merge them
+        // later if both are free. And update the old next neighbor to point
+        // to the new node (in middle)
+        if (node->neighbor_next != OA_UNUSED)
+            self->nodes[node->neighbor_next].neighbor_prev = new_node_index;
+
         self->nodes[new_node_index].neighbor_prev = node_index;
         self->nodes[new_node_index].neighbor_next = node->neighbor_next;
         node->neighbor_next = new_node_index;
     }
 
     allocation->offset = node->data_offset;
-    allocation->metadata = node_index;
+    allocation->index = node_index;
     return 0;
 }
 
 void oa_free(oa_allocator_t* self, oa_allocation_t *allocation)
 {
-    OA_ASSERT(allocation->metadata != OA_INVALID_INDEX);
+    if (allocation->index == OA_INVALID_INDEX) return;
     if (!self->nodes) return;
 
-    uint32_t node_index = allocation->metadata;
+    uint32_t node_index = allocation->index;
     oa_node_t *node = &self->nodes[node_index];
 
     // Double delete check
-    OA_ASSERT(node->data_size & OA_NODE_USED_FLAG);
+    oa_assert(node->data_size & OA_NODE_USED_FLAG);
 
     // Merge with neighbors...
     uint32_t offset = node->data_offset;
     uint32_t size = node->data_size & OA_NODE_DATA_SIZE_MASK;
 
-    OA_ASSERT(node->neighbor_prev != node_index);
-    if ((node->neighbor_prev != OA_UNUSED) && (!(self->nodes[node->neighbor_prev].data_size & OA_NODE_USED_FLAG))) {
-        // Previous (contiguous) free node: Change offset to previous node offset. Sum sizes
+    oa_assert(node->neighbor_prev != node_index);
+    if ((node->neighbor_prev != OA_UNUSED) &&
+        (!(self->nodes[node->neighbor_prev].data_size & OA_NODE_USED_FLAG))) {
+        // Previous (contiguous) free node:
+        // Change offset to previous node offset. Sum sizes
         oa_node_t *prev_node = &self->nodes[node->neighbor_prev];
         offset = prev_node->data_offset;
         size += prev_node->data_size & OA_NODE_DATA_SIZE_MASK;
@@ -393,12 +434,13 @@ void oa_free(oa_allocator_t* self, oa_allocation_t *allocation)
         // Remove node from the bin linked list and put it in the freelist
         remove_node_from_bin(self, node->neighbor_prev);
 
-        OA_ASSERT(prev_node->neighbor_next == node_index);
+        oa_assert(prev_node->neighbor_next == node_index);
         node->neighbor_prev = prev_node->neighbor_prev;
     }
 
-    OA_ASSERT(node->neighbor_next != node_index);
-    if ((node->neighbor_next != OA_UNUSED) && (!(self->nodes[node->neighbor_next].data_size & OA_NODE_USED_FLAG))) {
+    oa_assert(node->neighbor_next != node_index);
+    if ((node->neighbor_next != OA_UNUSED) &&
+        (!(self->nodes[node->neighbor_next].data_size & OA_NODE_USED_FLAG))) {
         // Next (contiguous) free node: Offset remains the same. Sum sizes.
         oa_node_t *next_node = &self->nodes[node->neighbor_next];
         size += next_node->data_size & OA_NODE_DATA_SIZE_MASK;
@@ -406,7 +448,7 @@ void oa_free(oa_allocator_t* self, oa_allocation_t *allocation)
         // Remove node from the bin linked list and put it in the freelist
         remove_node_from_bin(self, node->neighbor_next);
 
-        OA_ASSERT(next_node->neighbor_prev == node_index);
+        oa_assert(next_node->neighbor_prev == node_index);
         node->neighbor_next = next_node->neighbor_next;
     }
 
@@ -414,11 +456,12 @@ void oa_free(oa_allocator_t* self, oa_allocation_t *allocation)
     uint32_t neighbor_prev = node->neighbor_prev;
 
     // Insert the removed node to freelist
-#ifdef OA_DEBUG_VERBOSE
-    printf("Putting node %u into freelist[%u] (oa_free)\n", node_index, self->free_offset + 1);
+#if defined(OA_VERBOSE)
+    printf("Putting node %u into freelist[%u] (oa_free)\n", node_index,
+        self->free_offset + 1);
 #endif
 
-    OA_ASSERT(self->free_offset + 1 < self->max_allocs);
+    oa_assert(self->free_offset + 1 < self->max_allocs);
     self->free_nodes[++self->free_offset] = node_index;
 
     // Insert the (combined) free node to bin
@@ -436,11 +479,12 @@ void oa_free(oa_allocator_t* self, oa_allocation_t *allocation)
     }
 }
 
-uint32_t oa_allocation_size(oa_allocator_t *self, const oa_allocation_t *allocation)
+uint32_t oa_allocation_size(oa_allocator_t *self,
+    const oa_allocation_t *allocation)
 {
-    if (allocation->metadata == OA_INVALID_INDEX) return 0;
+    if (allocation->index == OA_INVALID_INDEX) return 0;
     if (!self->nodes) return 0;
-    return self->nodes[allocation->metadata].data_size & OA_NODE_DATA_SIZE_MASK;
+    return self->nodes[allocation->index].data_size & OA_NODE_DATA_SIZE_MASK;
 }
 
 void oa_storage_report(const oa_allocator_t *self, oa_storage_report_t *report)
@@ -452,10 +496,13 @@ void oa_storage_report(const oa_allocator_t *self, oa_storage_report_t *report)
     if (self->free_offset != 0) {
         free_storage = self->free_storage;
         if (self->used_bins_top) {
-            uint32_t top_bin_index = 31 - lzcnt_nonzero(self->used_bins_top);
-            uint32_t leaf_bin_index = 31 - lzcnt_nonzero(self->used_bins[top_bin_index]);
-            largest_free_region = smallfloat_float_to_uint((top_bin_index << OA_TOP_BINS_INDEX_SHIFT) | leaf_bin_index);
-            OA_ASSERT(free_storage >= largest_free_region);
+            uint32_t top_bin_index =
+                31 - lzcnt_nonzero(self->used_bins_top);
+            uint32_t leaf_bin_index =
+                31 - lzcnt_nonzero(self->used_bins[top_bin_index]);
+            largest_free_region = smallfloat_float_to_uint(
+                (top_bin_index << OA_TOP_BINS_INDEX_SHIFT) | leaf_bin_index);
+            oa_assert(free_storage >= largest_free_region);
         }
     }
 
@@ -463,13 +510,14 @@ void oa_storage_report(const oa_allocator_t *self, oa_storage_report_t *report)
     report->largest_free_region = largest_free_region;
 }
 
-void oa_storage_report_full(const oa_allocator_t *self, oa_storage_report_full_t *report)
+void oa_storage_report_full(const oa_allocator_t *self,
+    oa_storage_report_full_t *report)
 {
     for (uint32_t i = 0; i < OA_NUM_LEAF_BINS; ++i) {
         uint32_t count = 0;
         uint32_t node_index = self->bin_indices[i];
         while (node_index != OA_UNUSED) {
-            OA_ASSERT(node_index < self->max_allocs);
+            oa_assert(node_index < self->max_allocs);
             node_index = self->nodes[node_index].bin_list_next;
             count++;
         }

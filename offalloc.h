@@ -13,14 +13,14 @@
 #define OA_NUM_LEAF_BINS OA_NUM_TOP_BINS * OA_BINS_PER_LEAF
 
 #define OA_NO_SPACE 0xffffffff
-#define OA_INVALID_INDEX 0xffff
-#define OA_UNUSED 0xffff
 
 typedef uint16_t oa_index_t;
+#define OA_INVALID_INDEX (oa_index_t)0xffff
+#define OA_UNUSED (oa_index_t)0xffff
 
 typedef struct oa_allocation_t {
     uint32_t offset;
-    oa_index_t metadata; // internal: node index
+    oa_index_t index; // internal: node index
 } oa_allocation_t;
 
 typedef struct ao_storage_report_t {
